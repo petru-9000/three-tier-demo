@@ -1,0 +1,69 @@
+require 'yaml'
+require 'json'
+
+# vm names, hostnames will be derived from these
+servers = ['demo-web', 'demo-app', 'demo-db']
+
+# default Virtualbox private network, IP's starting at:
+ip_base = '192.168.56.10' # start with 192.168.56.101
+
+# initialize ansible inventory variable
+inv = {
+  all: {
+    vars: {
+      ansible_host_key_checking: false,
+      ansible_ssh_timeout: 60
+    },
+    hosts: {}
+  }
+}
+
+# poor man's DNS
+$script = <<-SCRIPT
+#!/bin/bash
+file=/etc/hosts
+for i in 1@demo-web 2@demo-app 3@demo-db; do
+  read ip hostname <<< $(echo ${i} | awk -F@ '{printf "%s %s", $1, $2}')
+  if grep "#{ip_base}${ip}" ${file} > /dev/null 2>&1; then
+    echo "entry for ${hostname}.local present, moving on"
+  else
+    echo "adding entry for ${hostname}.local"
+    echo #{ip_base}${ip} ${hostname}.local ${hostname} >> ${file}
+  fi
+done
+SCRIPT
+
+# finally
+Vagrant.configure('2') do |config|
+  config.vm.provider 'virtualbox' do |v|
+    v.linked_clone = true
+  end
+
+  servers.each_with_index do |s, i|
+    node_ip = ip_base + (i + 1).to_s
+    # add entry to hosts file
+    inv[:all][:hosts][s] = {
+      ansible_host: ip_base + (i + 1).to_s,
+      ansible_user: 'vagrant',
+      ansible_ssh_private_key_file: '.vagrant/machines/' + s + '/virtualbox/private_key'
+    }
+      
+    config.vm.define s do |node|
+      node.vm.network 'private_network', ip: node_ip
+      node.vm.hostname = "#{s}.local"
+      node.vm.box = 'bento/ubuntu-22.04'
+      node.vm.provider 'virtualbox' do |v|
+        v.name = s
+        v.memory = s == 'demo-db' ? 2048 : 1024
+      end
+    end
+
+    i += 1
+  end
+
+  # symbol to string hack
+  inventory = JSON.load(inv.to_json).to_yaml
+  # save inventory
+  File.open('./hosts-vagrant.yml', 'w') {|f| f.write inventory}
+  config.vm.provision "shell", inline: $script
+end

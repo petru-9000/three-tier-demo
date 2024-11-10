@@ -1,0 +1,143 @@
+- name: Application frontend
+  hosts: demo-web
+  become: true
+  become_method: ansible.builtin.sudo
+
+  # vars:
+  #   demo_backend_endpoint: "http://demo-app.local:5000/api/records"
+
+  vars_files:
+    - "{{ vars_file }}"
+
+  tasks:
+    # In real life the backend URL would be known beforehand,
+    #   and templating would not be necessary
+    - name: Install frontend code
+      ansible.builtin.template:
+        src: ../frontend/index.html.j2
+        dest: /var/www/html/index.html
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Add favicon
+      ansible.builtin.copy:
+        src: ../frontend/images
+        dest: /var/www/html/
+        owner: root
+        group: root
+        mode: "0644"
+
+- name: Application backend
+  hosts: demo-app
+  become: false
+  become_method: ansible.builtin.sudo
+
+  # vars:
+  #   demo_db_fqdn: demo-db.local
+  #   demo_db_name: demo
+  #   demo_db_user: demo
+  #   demo_db_password: !vault |
+  #     $ANSIBLE_VAULT;1.1;AES256
+  #     38396162653831303732303464383065396233643834633834643530363631626361633361643363
+  #     3433333334303863326262313839363464666137323462630a346432343665633165373565373739
+  #     65376432336563616531316665393336353239373738383936346461623333333532653434613235
+  #     3661353937353433610a303466656164326465393534316164393733373563396433306466306466
+  #     3362
+
+  vars_files:
+    - "{{ vars_file }}"
+
+  tasks:
+    - name: Copy app code
+      ansible.builtin.copy:
+        src: ../backend/
+        dest: "{{ ansible_env.HOME }}/demo-app"
+        owner: "{{ ansible_user_id }}"
+        group: "{{ ansible_effective_group_id }}"
+        mode: "0755"
+      notify:
+        - Restart backend
+
+    # Create venv and install requirements
+    - name: Install requirements
+      ansible.builtin.pip:
+        requirements: "{{ ansible_env.HOME }}/demo-app/requirements.txt"
+        virtualenv: "{{ ansible_env.HOME }}/demo-venv"
+        virtualenv_command: "python{{ demo_python_version }} -m venv"
+
+    - name: Create service file
+      ansible.builtin.template:
+        src: demo-app.service.j2
+        dest: /usr/lib/systemd/system/demo-app.service
+        owner: root
+        group: root
+        mode: "0644"
+      notify:
+        - Daemon reload
+        - Restart backend
+      become: true
+      no_log: true
+
+    - name: Start backend service
+      ansible.builtin.service:
+        name: demo-app
+        state: started
+        enabled: true
+      become: true
+
+  handlers:
+    - name: Daemon reload
+      ansible.builtin.systemd:
+        daemon_reload: true
+      become: true
+
+    - name: Restart backend
+      ansible.builtin.service:
+        name: demo-app
+        state: restarted
+      become: true
+
+- name: Database application data
+  hosts: demo-db
+  become: true
+  become_method: ansible.builtin.sudo
+
+  # vars:
+  #   demo_db_name: demo
+  #   demo_db_user: demo
+  #   demo_db_password: hunter2
+
+  vars_files:
+    - "{{ vars_file }}"
+
+  tasks:
+    # This test is to provide idempotency for the subsequent shell command
+    # It will fail at first run, which is expected and protected with `ignore errors: true`
+    # Other options would be a custom fact script, which will need to include the password
+    # or a module, which is overkill for this demo
+    - name: Check if user exists
+      ansible.builtin.shell: >
+        sudo -i -u postgres psql
+        postgresql://{{ demo_db_user }}:{{ demo_db_password }}@127.0.0.1:5432/{{ demo_db_name }} -c "\\q"
+      register: psql_out
+      changed_when: false
+      ignore_errors: true
+      no_log: true
+
+    # This will create user 'demo', db 'demo', grant privileges, and create table 'records' with three entries
+    - name: Create user and db
+      ansible.builtin.shell: |
+        export dblogin="postgresql://{{ demo_db_user }}:{{ demo_db_password }}@127.0.0.1:5432/{{ demo_db_name }}"
+        sudo -i -u postgres createuser {{ demo_db_user }}
+        sudo -i -u postgres createdb {{ demo_db_name }} --owner {{ demo_db_user }}
+        sudo -i -u postgres psql -c "ALTER USER {{ demo_db_user }} WITH ENCRYPTED PASSWORD '{{ demo_db_password }}';"
+        sudo -i -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE {{ demo_db_name }} TO {{ demo_db_user }};"
+        sudo -i -u postgres psql -c "GRANT ALL ON SCHEMA public TO {{ demo_db_user }};"
+        sudo -i -u postgres psql ${dblogin} -c "CREATE TABLE records (band VARCHAR(255), record VARCHAR(255), year INT);"
+        sudo -i -u postgres psql ${dblogin} -c "INSERT INTO records (band, record, year) VALUES ('The Beatles', 'Revolver', 1966);"
+        sudo -i -u postgres psql ${dblogin} -c "INSERT INTO records (band, record, year) VALUES ('Yes', 'Relayer', 1974);"
+        sudo -i -u postgres psql ${dblogin} -c "INSERT INTO records (band, record, year) VALUES ('King Crimson', 'Discipline', 1981);"
+      no_log: true
+      changed_when: true
+      when: psql_out.failed

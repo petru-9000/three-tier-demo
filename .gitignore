@@ -1,0 +1,10 @@
+.vagrant/
+.vscode/
+.terraform*
+*.tfstate
+*.box
+node_modules/
+test.yml
+.terraform
+.terraform.lock.hcl
+hosts-vagrant.yml

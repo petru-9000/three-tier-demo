@@ -1,0 +1,21 @@
+[Unit]
+Description=Gunicorn instance to serve demo app
+After=network.target
+
+[Service]
+User={{ ansible_user_id }}
+Group={{ ansible_effective_group_id }}
+WorkingDirectory={{ ansible_env.HOME }}/demo-app
+Environment="PATH={{ ansible_env.HOME }}/demo-venv/bin"
+Environment="DB_FQDN={{ demo_db_fqdn }}"
+Environment="DB_NAME={{ demo_db_name }}"
+Environment="DB_USER={{ demo_db_user }}"
+Environment="DB_PASSWORD={{ demo_db_password }}"
+ExecStart={{ ansible_env.HOME }}/demo-venv/bin/gunicorn --workers 3 --bind 0.0.0.0:5000 app:app
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=10
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

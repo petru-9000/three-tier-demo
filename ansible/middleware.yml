@@ -1,0 +1,154 @@
+---
+# Manage frontend server ----------------------------------------------------------------------------------------------
+- name: Frontend
+  hosts: demo-web
+  become: true
+  become_method: ansible.builtin.sudo
+
+  # Uncomment these if you don't want to pass vars files on the command line
+  # vars:
+  #   demo_apache_http_port: "80"
+  #   demo_apache_https_port: "443"
+
+  vars_files:
+    - "{{ vars_file }}"
+
+  tasks:
+    - name: Install web server
+      ansible.builtin.apt:
+        name: apache2
+        update_cache: true
+
+    - name: Configure ports
+      ansible.builtin.template:
+        src: ports.conf.j2
+        dest: /etc/apache2/ports.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart apache
+
+    - name: Start web service
+      ansible.builtin.service:
+        name: apache2
+        state: started
+        enabled: true
+
+  handlers:
+    - name: Restart apache
+      ansible.builtin.service:
+        name: apache2
+        state: restarted
+
+# Manage backend server -----------------------------------------------------------------------------------------------
+- name: Backend
+  hosts: demo-app
+  become: false
+  become_method: ansible.builtin.sudo
+
+  # vars:
+  #   demo_python_version: "3.12"
+
+  vars_files:
+    - "{{ vars_file }}"
+
+  tasks:
+    - name: Install deps
+      ansible.builtin.apt:
+        name:
+          - libpq-dev
+          - gcc
+          - pip
+        update_cache: true
+      become: true
+
+    - name: Add python repo
+      ansible.builtin.apt_repository:
+        repo: ppa:deadsnakes/ppa
+        state: present
+      become: true
+
+    - name: Install python and deps
+      ansible.builtin.apt:
+        name:
+          - "python{{ demo_python_version }}"
+          - "python{{ demo_python_version }}-venv"
+          - "python{{ demo_python_version }}-dev"
+        update_cache: true
+      become: true
+
+# Manage database server ----------------------------------------------------------------------------------------------
+- name: Database
+  hosts: demo-db
+  become: true
+  become_method: ansible.builtin.sudo
+
+  # vars:
+  #   demo_postgresql_version: "17"
+
+  vars_files:
+    - "{{ vars_file }}"
+
+  tasks:
+    # Install from postgres repository, not the default OS one
+    - name: Add key for Postgres repo
+      ansible.builtin.apt_key:
+        url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+        state: present
+
+    - name: Install Postgres repo
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb http://apt.postgresql.org/pub/repos/apt/
+          {{ ansible_distribution_release }}-pgdg main
+        state: present
+        update_cache: true
+
+    - name: Install prereqs
+      ansible.builtin.apt:
+        name:
+          - python3-psycopg2
+          - libpq-dev
+
+    - name: Install Postgres
+      ansible.builtin.apt:
+        name:
+          - postgresql-{{ demo_postgresql_version }}
+          - postgresql-contrib-{{ demo_postgresql_version }} # virtual package
+          - postgresql-client-{{ demo_postgresql_version }}
+        update_cache: true
+
+    - name: "Configure postgres"
+      ansible.builtin.lineinfile:
+        path: /etc/postgresql/{{ demo_postgresql_version }}/main/postgresql.conf
+        regexp: "{{ item.regex }}"
+        line: "{{ item.line }}"
+        state: present
+      notify: Restart Postgresql
+      loop:
+        # listen to any IP
+        - { regex: "listen_addresses =", line: "listen_addresses = '*'" } # defaults to localhost
+        # disable ssl
+        - { regex: "ssl =", line: "ssl = false" } # it's a demo
+        # max connections
+        - { regex: "max_connections =", line: "max_connections = 1000" }
+
+    # Allow remote connections for our user and authenticated with encrypted password
+    - name: Configure pg_hba.conf
+      ansible.builtin.lineinfile:
+        path: /etc/postgresql/{{ demo_postgresql_version }}/main/pg_hba.conf
+        line: "host {{ demo_db_name }} {{ demo_db_user }} 0.0.0.0/0 md5"
+        state: present
+      notify: Restart Postgresql
+
+    - name: Start Postgres service
+      ansible.builtin.service:
+        name: postgresql
+        state: started
+        enabled: true
+
+  handlers:
+    - name: Restart Postgresql
+      ansible.builtin.service:
+        name: postgresql
+        state: restarted

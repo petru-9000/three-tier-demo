@@ -1,0 +1,9 @@
+- name: Three tier app deployment
+  hosts: localhost
+  gather_facts: false
+
+- name: Include infra playbook
+  ansible.builtin.import_playbook: ./middleware.yml
+
+- name: Include app playbook
+  ansible.builtin.import_playbook: ./application.yml
