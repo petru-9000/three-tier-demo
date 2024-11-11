@@ -10,8 +10,6 @@
     - "{{ vars_file }}"
 
   tasks:
-    # In real life the backend URL would be known beforehand,
-    #   and templating would not be necessary
     - name: Install frontend code
       ansible.builtin.template:
         src: ../frontend/index.html.j2
@@ -112,10 +110,8 @@
     - "{{ vars_file }}"
 
   tasks:
-    # This test is to provide idempotency for the subsequent shell command
+    # This test is meant to provide idempotency for the subsequent shell command
     # It will fail at first run, which is expected and protected with `ignore errors: true`
-    # Other options would be a custom fact script, which will need to include the password
-    # or a module, which is overkill for this demo
     - name: Check if user exists
       ansible.builtin.shell: >
         sudo -i -u postgres psql

@@ -5,9 +5,9 @@ require 'json'
 servers = ['demo-web', 'demo-app', 'demo-db']
 
 # default Virtualbox private network, IP's starting at:
-ip_base = '192.168.56.10' # start with 192.168.56.101
+ip_base = '192.168.56.10' # start with ...101
 
-# initialize ansible inventory variable
+# initialize ansible inventory
 inv = {
   all: {
     vars: {
@@ -21,14 +21,13 @@ inv = {
 # poor man's DNS
 $script = <<-SCRIPT
 #!/bin/bash
-file=/etc/hosts
 for i in 1@demo-web 2@demo-app 3@demo-db; do
   read ip hostname <<< $(echo ${i} | awk -F@ '{printf "%s %s", $1, $2}')
-  if grep "#{ip_base}${ip}" ${file} > /dev/null 2>&1; then
+  if grep "#{ip_base}${ip}" /etc/hosts > /dev/null 2>&1; then
     echo "entry for ${hostname}.local present, moving on"
   else
     echo "adding entry for ${hostname}.local"
-    echo #{ip_base}${ip} ${hostname}.local ${hostname} >> ${file}
+    echo "#{ip_base}${ip} ${hostname}.local ${hostname}" >> /etc/hosts
   fi
 done
 SCRIPT
@@ -41,9 +40,9 @@ Vagrant.configure('2') do |config|
 
   servers.each_with_index do |s, i|
     node_ip = ip_base + (i + 1).to_s
-    # add entry to hosts file
+    # add entry to inventory
     inv[:all][:hosts][s] = {
-      ansible_host: ip_base + (i + 1).to_s,
+      ansible_host: node_ip,
       ansible_user: 'vagrant',
       ansible_ssh_private_key_file: '.vagrant/machines/' + s + '/virtualbox/private_key'
     }
@@ -57,13 +56,12 @@ Vagrant.configure('2') do |config|
         v.memory = s == 'demo-db' ? 2048 : 1024
       end
     end
-
-    i += 1
   end
+
+  config.vm.provision "shell", inline: $script
 
   # symbol to string hack
   inventory = JSON.load(inv.to_json).to_yaml
-  # save inventory
+  # save inventory file
   File.open('./hosts-vagrant.yml', 'w') {|f| f.write inventory}
-  config.vm.provision "shell", inline: $script
 end
