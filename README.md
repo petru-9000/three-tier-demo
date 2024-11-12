@@ -6,7 +6,7 @@ The [ansible](./ansible) directory contains a playbook to provision the three se
 
 The app itself is a quick-and-dirty frontend/backend/database setup with javascript/python/postgresql. The Ansible phase of the deployment creates a database named `demo` with a table named `records` containing three rows. This is queried by the backend and the result offered on endpoint `/api/records`. The frontend presents a plain text page with data formatted as `<band> - <record>, <year>`.
 
-### Software versions
+## Software versions
 
 - Terraform: 1.9.8
 - Ansible: ansible-core 2.16

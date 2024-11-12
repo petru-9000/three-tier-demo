@@ -1,23 +1,23 @@
 # Provision middleware and deploy three-tier app with Ansible
 
-### Limitations:
+## Limitations
 
 - The servers are Ubuntu 22.04. No provision was made for other platforms (e.g. for `apt` module instead of `package`, and `apache2` instead of a scheme accomodating `httpd` as well).
 
-### Setup
+## Setup
 
 - Use a Linux machine
 - Install `ansible-core`, `Vagrant`, and `VirtualBox`
 - Optional: Install `sshpass` (needed by Ansible for password access to the VM's, not used here)
 - Optional: Add the following to your hosts file for easy browser access (Ansible uses IP's and does not need DNS):
 
-```
+``` shell
 192.168.56.101 demo-web.local demo-web
 192.168.56.102 demo-app.local demo-app
 192.168.56.103 demo-db.local demo-db
 ```
 
-### Usage
+## Usage
 
 Variables are loaded from a single `vars-vagrant.yml` file, allowing various actors (e.g. `Terraform`)to supply different sets of values as needed.
 
@@ -28,7 +28,7 @@ The variable `demo_db_password` is encrypted via `ansible-vault`, with command: 
 
 Alternatively, run the playbooks separately, starting with `middleware.yml`; the vault secret is only required by `application.yml`:
 
-```
+``` shell
 ansible-playbook -i hosts-vagrant.yml -e vars_file=vars-vagrant.yml middleware.yml
 ansible-playbook -i hosts-vagrant.yml -e vars_file=vars-vagrant.yml --vault-password-file ~/vault-pass.txt application.yml
 ```
@@ -37,17 +37,17 @@ Hint: If you just want to generate the inventory file, run any vagrant command e
 
 All playbooks are idempotent, meaning a second run of the `ansible-playbook` command should result in no changes made to the targets.
 
-### Verification
+## Verification
 
 Point a browser to `http://demo-web.local`, you should see a plain text page with data formatted as `<band> - <record>, <year>`.
 The same data should be visible from `http://demo-app.local:5000`, formatted as an array of three arrays with three elements.
 The same data should be visible on `demo-db.local` when issuing: `sudo -i -u postgres psql postgresql://demo:hunter2@127.0.0.1:5432/demo -c "SELECT * FROM records;"`
 
-### Tests
+## Tests
 
 Inspec tests are provided in [ansible/test](./test), see the [readme](./test/README.md) for details.
 
-### What is being done
+## What is being done
 
 Ansible is run under a non-root user that has passwordless sudo (`vagrant`, or `ubuntu` in AWS). The main playbook, `playbook.yml`, simply includes the other two such as infra operations are kept separate from application deployment. The two playbooks can be run independently, but the application deployment will fail if the middleware is absent.
 

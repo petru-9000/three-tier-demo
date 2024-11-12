@@ -4,7 +4,7 @@ The tests are run with Chef's `inspec` (paid) otr its open source (free) version
 
 From this directory, after deploying the app locally (in Vagrant):
 
-```
+``` shell
 cinc-auditor exec --sudo -t ssh://vagrant:vagrant@demo-web.local web_test.rb
 cinc-auditor exec --sudo -t ssh://vagrant:vagrant@demo-app.local app_test.rb
 cinc-auditor exec --sudo -t ssh://vagrant:vagrant@demo-db.local db_test.rb
@@ -12,7 +12,7 @@ cinc-auditor exec --sudo -t ssh://vagrant:vagrant@demo-db.local db_test.rb
 
 Or to run all:
 
-```
+``` shell
 for component in web app db; do
   cinc-auditor exec --sudo -t ssh://vagrant:vagrant@demo-${component}.local ${component}_test.rb
 done
@@ -20,7 +20,7 @@ done
 
 A succsessful run will display this:
 
-```
+``` shell
 Profile:   tests from web_test.rb (tests from web_test.rb)
 Version:   (not specified)
 Target:    ssh://vagrant@demo-web.local:22
